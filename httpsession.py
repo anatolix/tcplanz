@@ -1,10 +1,11 @@
+from __future__ import print_function
+
 import dpkt
 import gzip
 import zlib
 import struct
 import sys
 from collections import defaultdict
-from cStringIO import StringIO
 
 from tcpsession import TCPSession, tcp_flags
 
@@ -58,10 +59,10 @@ class HTTPResponse(dpkt.http.Response):
                 return None
 
         if self.after_error: 
-            print >> file, "[!]",
+            print("[!]", file=file, end=' ')
         else:
-            print >> file, "   ",
-        print >> file, self.method, self.status, len(self.html), self.reqid, num(self.start_packet), num(self.start_acked_by), num(self.finish_acked_by), num(self.finish_packet)
+            print("   ", file=file, end=' ')
+        print(self.method, self.status, len(self.html), self.reqid, num(self.start_packet), num(self.start_acked_by), num(self.finish_acked_by), num(self.finish_packet), file=file)
 
 
 class HTTPRequest(dpkt.http.Request): 
@@ -92,7 +93,7 @@ class HTTPRequest(dpkt.http.Request):
         if 'user-agent' in self.headers:
             self.user_agent=self.headers['user-agent']
             if isinstance(self.user_agent,list):
-                print >> sys.stderr, "several user agent headers: %s" % self.user_agent
+                print("several user agent headers: %s" % self.user_agent, file=sys.stderr)
                 self.user_agent=self.user_agent[0]
             self.user_agent=self.user_agent.replace('\t',' ')
 
@@ -109,12 +110,12 @@ class HTTPRequest(dpkt.http.Request):
                 return None
 
         if self.after_error: 
-            print >> file, "[!]",
+            print("[!]", file=file, end=' ')
         else:
-            print >> file, "   ",
-        print >> file, self.method, self.uri, num(self.start_packet), num(self.start_acked_by), num(self.finish_acked_by), num(self.finish_packet)
+            print("   ", file=file, end=' ')
+        print(self.method, self.uri, num(self.start_packet), num(self.start_acked_by), num(self.finish_acked_by), num(self.finish_packet), file=file)
         if self.method=='POST':
-            print >> file, "   ", self.body 
+            print("   ", self.body, file=file)
 
 class HTTPParsingError(Exception):
 
@@ -124,7 +125,7 @@ class HTTPParsingError(Exception):
         super(Exception,self).__init__(what)
 
     def self_print(self,file):
-        print >> file, "[!]", self, "packet=", self.packet_num
+        print("[!]", self, "packet=", self.packet_num, file=file)
 
 def do_find_reqid(html,start,end):
 
@@ -143,16 +144,16 @@ def do_find_reqid(html,start,end):
 def find_reqid(html):
     # &quot;reqid&quot;:&quot;1411477474460449-1010877493331376977222096-8-031&quot;
 
-    reqid = do_find_reqid(html,'&quot;reqid&quot;:&quot;','&quot;')
+    reqid = do_find_reqid(html, b'&quot;reqid&quot;:&quot;', b'&quot;')
     if reqid: return reqid
 
-    reqid = do_find_reqid(html,'<reqid>','</reqid>')
+    reqid = do_find_reqid(html, b'<reqid>', b'</reqid>')
     if reqid: return reqid
 
-    reqid = do_find_reqid(html,'for-reqid=','&')
+    reqid = do_find_reqid(html, b'for-reqid=', b'&')
     if reqid: return reqid
 
-    reqid = do_find_reqid(html,'"reqid":"','"')
+    reqid = do_find_reqid(html, b'"reqid":"', b'"')
     if reqid: return reqid
 
     return None
@@ -186,12 +187,12 @@ def parse_http_streams(tupl, data, reverse_content, content):
 
             if stream[:len(start_packet.data)]!=start_packet.data:
                 #could be double data in different packets - we don't really know whish one is in effect
-                #print >> sys.stderr, tupl, "Diff packets(not error)", current_seq-1, start_packet.seq, len(start_packet.data), start_packet.data
+                #print(tupl, "Diff packets(not error)", current_seq-1, start_packet.seq, len(start_packet.data), start_packet.data, file=sys.stderr)
                 pass
 
-            if stream[:4] == 'HTTP':
+            if stream[:4] == b'HTTP':
                 http = HTTPResponse(stream,start_packet.num,tupl)
-            elif stream[:4] == 'POST' or stream[:4] == 'HEAD' or stream[:3] == 'GET':
+            elif stream[:4] == b'POST' or stream[:4] == b'HEAD' or stream[:3] == b'GET':
                 http = HTTPRequest(stream,start_packet.num,tupl)
             else:
                 raise HTTPParsingError(what="wtf is this data", packet_num=start_packet.num, seq=start_seq,  stream=stream)

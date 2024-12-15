@@ -1,5 +1,7 @@
 #!/usr/bin/env pypy
 
+from __future__ import print_function
+
 import dpkt
 import gzip
 import zlib
@@ -7,33 +9,7 @@ import struct
 import sys
 import socket
 from collections import defaultdict
-from cStringIO import StringIO
 from bisect import bisect_left
-
-def fixed_parse_opts(buf):
-    #this is fixed procedure from dpkt. dpkt one sometimes produce infinite loop
-    opts = []
-    while buf:
-        o = ord(buf[0])
-        if o > dpkt.tcp.TCP_OPT_NOP:
-            try:
-                if len(buf)<2: 
-                    print >> sys.stderr, "Strange opts!"
-                    break
-                l = ord(buf[1])
-                if l==0:
-                    opts.append((None,None)) # XXX
-                    print >> sys.stderr, "Strange opts!"
-                    break
-                d, buf = buf[2:l], buf[l:]
-            except ValueError:
-                #print 'bad option', repr(str(buf))
-                opts.append((None,None)) # XXX
-                break
-        else:
-            d, buf = '', buf[1:]
-        opts.append((o,d))
-    return opts
 
 def tcp_flags(flags):
 
@@ -61,13 +37,13 @@ def http_type(stream):
     
     #stream = tcp.data
 
-    if stream[:4] == 'HTTP':
+    if stream[:4] == b'HTTP':
         return 'HTTP'
-    elif stream[:4] == 'POST':
+    elif stream[:4] == b'POST':
         return 'POST'
-    elif stream[:4] == 'HEAD':
+    elif stream[:4] == b'HEAD':
         return 'HEAD'
-    elif stream[:3] == 'GET':
+    elif stream[:3] == b'GET':
         return 'GET'
     else:
         return ''
@@ -97,11 +73,11 @@ def linearize(value, base_value, ts, what='', diag=""):
         assert base_value + delta_1 >= 0, "%d %d %d %s %s" % (value, base_value,delta_1, what, diag)
         return base_value + delta_1
     elif abs(delta_2) < abs(delta_1) and abs(delta_2) < 0x100000 and (base_value + delta_2) >= 0 :
-        print >> sys.stderr, "OVERFLOW DETECTED: " + what + " v=", value, "b=", base_value, "d=",delta_1,delta_21,delta_31, diag
+        print("OVERFLOW DETECTED: " + what + " v=", value, "b=", base_value, "d=",delta_1,delta_21,delta_31, diag, file=sys.stderr)
         assert base_value + delta_2 >= 0, "%d %d %d %s %s" % (value, base_value,delta_2, what, diag)
         return base_value + delta_2
     else:
-        print >> sys.stderr, "WTF? SPOOF DETECTED?", value, base_value, "(", "%lf" % ts, ")", delta_1, delta_21, delta_31, diag
+        print("WTF? SPOOF DETECTED?", value, base_value, "(", "%lf" % ts, ")", delta_1, delta_21, delta_31, diag, file=sys.stderr)
         return None
 
 class TCPSession:
@@ -189,15 +165,15 @@ class TCPSession:
         seq = tcp.seq
 
         linear_seq=linearize(seq,self.current_seq, tcp.ts - self.prev_pkt_ts, 'SEQ',TCPSession.display_key(self.directed_key)) 
-        #print  linear_seq, tcp.seq
+        #print(linear_seq, tcp.seq)
 
         if linear_seq is None:
             if tcp.flags & dpkt.tcp.TH_SYN:
-            #print >> sys.stderr, "TCP PORTS REUSE DETECTED!", TCPSession.display_key(self.directed_key), seq
+            #print("TCP PORTS REUSE DETECTED!", TCPSession.display_key(self.directed_key), seq, file=sys.stderr)
                 if not self.ended: 
-                    print >> sys.stderr, "WASN'T PROPERLY ENDED BEFORE PORT REUSED!", TCPSession.display_key(self.directed_key), seq
+                    print("WASN'T PROPERLY ENDED BEFORE PORT REUSED!", TCPSession.display_key(self.directed_key), seq, file=sys.stderr)
                 if tcp.ts - self.prev_pkt_ts < 60:
-                    print >> sys.stderr, "SMALL TIMEOUT BEFORE PORT REUSE!", TCPSession.display_key(self.directed_key), seq, tcp.ts - self.prev_pkt_ts
+                    print("SMALL TIMEOUT BEFORE PORT REUSE!", TCPSession.display_key(self.directed_key), seq, tcp.ts - self.prev_pkt_ts, file=sys.stderr)
                 return False
             else:
                 raise SeqException("WTF? SEQ SPOOF DETECTED? " + TCPSession.display_key(self.directed_key))
@@ -212,16 +188,16 @@ class TCPSession:
 
             tcp.sack=None
             if tcp.opts is not None and tcp.opts != '':
-                #print "opts: ", len(tcp.opts),
+                #print("opts: ", len(tcp.opts), end=' ')
                 #for c in tcp.opts:
-                #    print ord(c),
-                #print
-                parsed_opts = fixed_parse_opts(tcp.opts)
+                #    print(ord(c), end=' ')
+                #print()
+                parsed_opts = dpkt.tcp.parse_opts(tcp.opts)
                 for kind, opt in parsed_opts:
                     if kind == 5: #SACK
                         opt = opt[::-1]
                         assert len(opt) % 8 == 0, "bad SACK len %d" % len(opt)
-                        tcp.sack=struct.unpack('I'*(len(opt)/4),opt)[::-1]
+                        tcp.sack = struct.unpack('I' * (len(opt) // 4), opt)[::-1]
             tcp.linear_sack = tcp.sack
 
             if self.pair.current_seq is not None: #do same with ACK because it could overflow too
@@ -230,7 +206,7 @@ class TCPSession:
 
                 if tcp.linear_ack is None:
                     tcp.string_flags += '!'
-                    #print >> sys.stderr, "WTF? ACK SPOOF DETECTED? or just unfinished packets?" + TCPSession.display_key(self.directed_key), tcp.num+1, tcp.ts - self.pair.prev_pkt_ts
+                    #print("WTF? ACK SPOOF DETECTED? or just unfinished packets?" + TCPSession.display_key(self.directed_key), tcp.num+1, tcp.ts - self.pair.prev_pkt_ts, file=sys.stderr)
                     raise SeqException("WTF? ACK SPOOF DETECTED? " + TCPSession.display_key(self.directed_key))
 
                 
@@ -264,7 +240,7 @@ class TCPSession:
         
         seq_delta = self.content[0][0]
         self.initial_seq = self.content[0][1].seq
-        #print self.content[0][1].num+1, self.content[0][1].seq
+        #print(self.content[0][1].num+1, self.content[0][1].seq)
 
         assert seq_delta==self.initial_seq
 
@@ -342,11 +318,11 @@ class TCPSession:
     @staticmethod
     def in_packet(adjusted_seq, content, starting_pos = 0):
 
-        #print >> sys.stderr, adjusted_seq, content
+        #print(adjusted_seq, content, file=sys.stderr)
 
         for pos in range(starting_pos,len(content)):
 
-            #print >> sys.stderr, content[pos][1].adjusted_seq, (content[pos][1].adjusted_seq + len(content[pos][1].data))
+            #print(content[pos][1].adjusted_seq, (content[pos][1].adjusted_seq + len(content[pos][1].data)), file=sys.stderr)
 
             #TODO: optimize this
             if content[pos][1].adjusted_seq <= adjusted_seq and (content[pos][1].adjusted_seq + len(content[pos][1].data)) > adjusted_seq:
@@ -364,32 +340,32 @@ class TCPSession:
 
         for pppp in packets:
             p=pppp[1]
-            #print p.ts, p.num+1, max_seq, "_", 
+            #print(p.ts, p.num+1, max_seq, "_", end=' ')
             if len(p.data)>0:
                 if p.adjusted_seq < max_seq and p.adjusted_seq in seen:
                     p.retransmit_original = seen[p.adjusted_seq]
                     assert p.retransmit_original is not None
-                    #print "seen1", p.adjusted_seq, max_seq
+                    #print("seen1", p.adjusted_seq, max_seq)
                 elif p.adjusted_seq < max_seq and len(p.data)==1:
                     #probably keep-alive
                     p.retransmit_original="xz"
-                    for pp in seen.iterkeys():
-                        #print pp, p.adjusted_seq, len(seen[pp].data)
+                    for pp in seen:
+                        #print(pp, p.adjusted_seq, len(seen[pp].data))
                         if pp <= p.adjusted_seq and pp+len(seen[pp].data)>p.adjusted_seq:
                             p.retransmit_original = seen[pp]
                             seen[p.adjusted_seq] = seen[pp]
                             break
                     if p.retransmit_original=="xz":
-                        print >> sys.stderr, " Can't find retransmit original", TCPSession.display_key(p.connection.directed_key)
-                    #print "seen2" 
+                        print(" Can't find retransmit original", TCPSession.display_key(p.connection.directed_key), file=sys.stderr)
+                    #print("seen2")
                 else:
                     p.retransmit_original=None
                     seen[p.adjusted_seq]=p
-                    #print "seen3", p.adjusted_seq, max_seq 
+                    #print("seen3", p.adjusted_seq, max_seq)
 
             else:
                 p.retransmit_original=None
-                #print "data0", len(p.data) 
+                #print("data0", len(p.data))
 
 
             new_max_seq = p.adjusted_seq + len(p.data)
@@ -426,7 +402,7 @@ class TCPSession:
                     p.retransmit='F' 
                     false_retransmits += 1
                 if p.retransmit_original is None:
-                    print "No retransmit original, wtf? %d %s" % (p.num, TCPSession.display_key(p.connection.directed_key))
+                    print("No retransmit original, wtf? %d %s" % (p.num, TCPSession.display_key(p.connection.directed_key)))
                 retransmits += 1
                 if p.adjusted_seq in seen:
                     p.retr_timeout = int((p.ts - seen[p.adjusted_seq].ts)*1000)
@@ -439,7 +415,7 @@ class TCPSession:
                 p.retr_timeout = None
                 #if p.retransmit_original is None: p.retransmit=p.retransmit+"!"
                 if p.retransmit_original is None:
-                    print "No retransmit original, wtf? %d %s" % (p.num, TCPSession.display_key(p.connection.directed_key))
+                    print("No retransmit original, wtf? %d %s" % (p.num, TCPSession.display_key(p.connection.directed_key)))
             else:
                 p.retransmit='.'
                 seen[p.adjusted_seq]=p
@@ -449,7 +425,7 @@ class TCPSession:
                 max_seq = p.adjusted_seq + 1
 
         if len(retr_time)>0:
-            retr_time = sum(retr_time)/len(retr_time)
+            retr_time = sum(retr_time) // len(retr_time)
         else:
             retr_time = 0
 
@@ -459,11 +435,11 @@ class TCPSession:
     def rtt(packets, start_seq, end_seq):
 
         rtts = [ p.rtt for s,p in packets if p.adjusted_seq >= start_seq and p.adjusted_seq <= end_seq and ((len(p.data) > 0) or (p.flags & dpkt.tcp.TH_SYN))]
-        rtts = [ r for r in rtts if r >= 0]
+        rtts = [ r for r in rtts if r != None and r >= 0]
         rtts = sorted(rtts) 
 
         if len(rtts)>0:
-            return rtts[0],rtts[len(rtts)/2],rtts[-1]
+            return rtts[0], rtts[len(rtts) // 2], rtts[-1]
         else:
             return None
 
@@ -475,7 +451,7 @@ class TCPSession:
         #syn = False
         adjusted_stream_seq = None
         result = []
-        (current_data,current_start_seq)=('',None)
+        current_data, current_start_seq = b'', None
 
         self.adjust_seq()
         self.find_acks()
@@ -495,7 +471,7 @@ class TCPSession:
                 if len(tcp.data)>0 and http_type(tcp.data)!='':
                     if len(current_data) > 0:
                         result += [(True,current_start_seq,current_data,'DATA')]
-                        current_data,current_start_seq='',adjusted_seq
+                        current_data, current_start_seq = b'', adjusted_seq
 
                 current_data += tcp.data
                 adjusted_stream_seq = adjusted_seq + len(tcp.data)
@@ -506,7 +482,7 @@ class TCPSession:
                 if len(tcp.data)==1:
                     result += [(False,current_start_seq,tcp.data,'SYN KEEPALIVE PADDING')] 
                     adjusted_stream_seq = adjusted_seq + len(tcp.data)
-                    current_data,current_start_seq='',adjusted_seq+len(tcp.data)
+                    current_data, current_start_seq = b'', adjusted_seq + len(tcp.data)
                 else:
                     raise SeqException("DATA %d bytes with SEQ=0, %s" % (len(tcp.data), TCPSession.display_key(self.directed_key)))
 
@@ -519,8 +495,8 @@ class TCPSession:
                 if len(current_data) > 0: #could be on FIN
                     result += [(True,current_start_seq,current_data,'DATA')]
                         
-                result += [(False,current_start_seq,' ',pad+' PADDING')] #adding fake stream part
-                current_data,current_start_seq='',adjusted_seq
+                result += [(False, current_start_seq, b' ', pad+' PADDING')] #adding fake stream part
+                current_data, current_start_seq = b'', adjusted_seq
 
                 current_data += tcp.data
                 adjusted_stream_seq = adjusted_seq + len(tcp.data)
@@ -530,15 +506,15 @@ class TCPSession:
 
                     if len(current_data) > 0:
                         result += [(True,current_start_seq,current_data,'DATA')]
-                        current_data,current_start_seq='',adjusted_seq
+                        current_data, current_start_seq = b'', adjusted_seq
 
                     if adjusted_seq-adjusted_stream_seq > 1000000:
-                        print >> sys.stderr, "teardrop, seq overflow, or to many packets lost(%s), %d" % (TCPSession.display_key(self.directed_key), adjusted_seq-adjusted_stream_seq)
+                        print("teardrop, seq overflow, or to many packets lost(%s), %d" % (TCPSession.display_key(self.directed_key), adjusted_seq-adjusted_stream_seq), file=sys.stderr)
                         return None
                     result += [(False,adjusted_seq,' '*(adjusted_seq-adjusted_stream_seq),'LOST PACKET')]
                     adjusted_stream_seq = adjusted_seq
 
-                    current_data,current_start_seq='',adjusted_seq
+                    current_data, current_start_seq = b'', adjusted_seq
                     current_data += tcp.data
                     adjusted_stream_seq = adjusted_seq + len(tcp.data)
 
@@ -551,35 +527,35 @@ class TCPSession:
                     else:
                         seq_crossestion = adjusted_stream_seq - adjusted_seq
                         seq_crossestion2 = current_start_seq - adjusted_seq
-                        #print >> sys.stderr, "seq_crossestion:", seq_crossestion, seq_crossestion2
+                        #print("seq_crossestion:", seq_crossestion, seq_crossestion2, file=sys.stderr)
                         if seq_crossestion2 > 0:
-                            print >> sys.stderr, "very old packet", TCPSession.display_key(self.directed_key)
+                            print("very old packet", TCPSession.display_key(self.directed_key), file=sys.stderr)
                             return None
 
-                        #print >> sys.stderr, "current_data_len:", len(current_data)
-                        #print >> sys.stderr, "tcp_data_len:", len(tcp.data)
+                        #print("current_data_len:", len(current_data), file=sys.stderr)
+                        #print("tcp_data_len:", len(tcp.data), file=sys.stderr)
                         if current_data[-seq_crossestion:] == tcp.data [:seq_crossestion]:
-                            #print >> sys.stderr, "content match"
+                            #print("content match", file=sys.stderr)
                             tcp_data = tcp.data[seq_crossestion:]
 
                             if len(tcp_data)>0 and http_type(tcp_data)!='':
                                 if len(current_data) > 0:
                                     result += [(True,current_start_seq,current_data,'DATA')]
-                                    current_data,current_start_seq='',adjusted_seq+seq_crossestion
+                                    current_data, current_start_seq = b'', adjusted_seq + seq_crossestion
 
                             current_data += tcp_data
                             adjusted_stream_seq = adjusted_seq + seq_crossestion + len(tcp_data)
 
                         else:
-                            print >> sys.stderr, "tcp attack", TCPSession.display_key(self.directed_key)
+                            print("tcp attack", TCPSession.display_key(self.directed_key), file=sys.stderr)
                             return None
 
 
                             #IT COULD'T BE RETRANSMIT WE TAKE CARE OF IT BEFORE. IT IS ILL ALIGNED PACKETS, SHOULD LOOK INTO THIS
-                            #print >> errors, tcp.num, tcp.string_ts, TCPSession.display_key(tcp.connection.directed_key), len(tcp.data), tcp.string_flags, "ILLALIGNED PACKET", adjusted_stream_seq, adjusted_seq
+                            #print(tcp.num, tcp.string_ts, TCPSession.display_key(tcp.connection.directed_key), len(tcp.data), tcp.string_flags, "ILLALIGNED PACKET", adjusted_stream_seq, adjusted_seq, file=errors)
                             #self.status = "ILLALIGNED PACKET"
-                            ##if streams: print >> streams, ' ', "ILLALIGNED PACKET"
-                            ##if streams: print >> streams
+                            ##if streams: print(' ', "ILLALIGNED PACKET", file=streams)
+                            ##if streams: print(file=streams)
                             #return (buf, "ILLALIGNED PACKET")
             
             
@@ -590,7 +566,7 @@ class TCPSession:
             total_data=0
             for b,s,r,c in result:
                 total_data+=len(r)
-                #print >> sys.stderr, "\t", b, s, len(r), c
+                #print("\t", b, s, len(r), c, file=sys.stderr)
                 assert s is not None
 
             total_data += len(current_data)
@@ -598,14 +574,14 @@ class TCPSession:
 
         if len(current_data)>0:
             result += [(True,current_start_seq,current_data,'DATA')]
-            current_data,current_start_seq='',None
+            current_data, current_start_seq = b'', None
 
 
         #debug once more
         total_data=0
         for b,s,r,c in result:
             total_data+=len(r)
-            #print >> sys.stderr, "\t", b, s, len(r), c
+            #print("\t", b, s, len(r), c, file=sys.stderr)
             assert s is not None
 
         if adjusted_stream_seq is None: 
@@ -619,8 +595,8 @@ class TCPSession:
         #    self.status = "STREAM OK"
         #else:
         #    self.status = "SYN OR HTTP HEADER NOT FOUND"
-        ##if streams: print >> streams, ' ', self.status
-        ##if streams: print >> streams
+        ##if streams: print(' ', self.status, file=streams)
+        ##if streams: print(file=streams)
 
         return result
 

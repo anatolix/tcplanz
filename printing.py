@@ -1,3 +1,4 @@
+from __future__ import print_function
 
 import sys
 import dpkt
@@ -52,7 +53,7 @@ def print_packet(file, tcp, direction_hint=None):
         sacked_acked=acked+sacked
         rtt = tcp.rtt
         if rtt is not None and abs(rtt)>1000:
-            rtt = str(rtt/1000)+'s'
+            rtt = str(rtt // 1000) + 's'
         rtt = "[%4s]" % rtt
     else:
         rtt=''
@@ -60,21 +61,21 @@ def print_packet(file, tcp, direction_hint=None):
 
     adjusted_sack=getattr(tcp,'adjusted_sack', '')
 
-    print >> file, "%10d %7s %f %ls %4d %4s %7ds %7sa %5s %10s %s" % (tcp.num, rtt, tcp.ts, display_key, len(tcp.data), string_flags, getattr(tcp,'adjusted_seq',-1), ack, retr, sacked_acked, adjusted_sack),
+    print("%10d %7s %f %ls %4d %4s %7ds %7sa %5s %10s %s" % (tcp.num, rtt, tcp.ts, display_key, len(tcp.data), string_flags, getattr(tcp,'adjusted_seq',-1), ack, retr, sacked_acked, adjusted_sack), file=file, end=' ')
 
     partof = getattr(tcp,'partof',None)
     if partof is not None:
-        for http, partkind in partof.iteritems():
-            print >> file, "%2s" % partkind,
-            print >> file, http.method,
+        for http, partkind in partof.items():
+            print("%2s" % partkind, file=file, end=' ')
+            print(http.method, file=file, end=' ')
             if hasattr(http,'status'):
-                print >> file, http.status,
+                print(http.status, file=file, end=' ')
             if hasattr(http,'uri'):
-                print >> file, http.uri,
+                print(http.uri, file=file, end=' ')
             if getattr(http,'reqid',None): 
-                print >> file, http.reqid,
+                print(http.reqid, file=file, end=' ')
 
-    print >> file, ""
+    print("", file=file)
 
 def print_tcp_session(packets,connection_stream,reverse_connection_stream,direction_hint, num):
 
@@ -84,7 +85,7 @@ def print_tcp_session(packets,connection_stream,reverse_connection_stream,direct
 
     if direction_hint:
         server,server_port,client,client_port = TCPSession.split_key(direction_hint)
-        print  >> debug_stream, "server: %s:%s <-> client %s:%s" % (server,server_port,client,client_port)
+        print("server: %s:%s <-> client %s:%s" % (server,server_port,client,client_port), file=debug_stream)
     for seq,tcp in packets:
         prefix = ''
         if prev_packet is not None:
@@ -98,25 +99,34 @@ def print_tcp_session(packets,connection_stream,reverse_connection_stream,direct
         else:
             prefix = ' ' + prefix
 
-        print >> debug_stream, prefix,
+        print(prefix, file=debug_stream, end=' ')
         print_packet(debug_stream,tcp,direction_hint)
         prev_packet=tcp
+
+    # Python 2 & 3 compatible way to filter out non-printable characters
+    printables = {}
+    for byte in range(ord(' '), ord('z') + 1):
+        char = chr(byte)
+        # Python 3: sequence of bytes
+        printables[byte] = char
+        # Python 2: sequence of one-length strings
+        printables[char] = char
 
     if connection_stream:
         for real,seq,data,comment in connection_stream:
             l = len(data)
-            data = [ c for c in data[:1000] if c>=' ' and c < 'z' ]
+            data = [ printables[c] for c in data[:1000] if c in printables ]
             data = ''.join(data)
-            print >> debug_stream, "->", real, seq, comment, l, "[ "+data[:100]+" ]"
+            print("->", real, seq, comment, l, "[ "+data[:100]+" ]", file=debug_stream)
 
     if reverse_connection_stream:
         for real,seq,data,comment in reverse_connection_stream:
             l = len(data)
-            data = [ c for c in data if c>=' ' and c < 'z' ]
-            data = ''.join(data)    
-            print >> debug_stream, "<-", real, seq, comment, l, "[ "+data[:100]+" ]"
+            data = [ printables[c] for c in data if c in printables ]
+            data = ''.join(data)
+            print("<-", real, seq, comment, l, "[ "+data[:100]+" ]", file=debug_stream)
 
-    print >> debug_stream, "" 
+    print("", file=debug_stream)
 
 
 def normal_session(http_items,connection,reverse_connection):
@@ -188,14 +198,14 @@ def print_results(http_stream,http_request,http_response):
      server_as,server_24,client_as,client_24)
 
     def fmt(t):
-        if t is float: 
-            return "%lf" % t 
+        if type(t) is float:
+            return str(round(t, 2))
         else: 
             return str(t)
     r = map(fmt, r)
 
 
-    print >> http_stream, '\t'.join(r)
+    print('\t'.join(r), file=http_stream)
 
 
 def header():
