@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import dpkt
 import sys
 import zlib
@@ -180,7 +182,7 @@ class HTTPRequest(dpkt.http.Request):
         if 'user-agent' in self.headers:
             self.user_agent=self.headers['user-agent']
             if isinstance(self.user_agent,list):
-                print >> sys.stderr, "several user agent headers: %s" % self.user_agent
+                print("several user agent headers: %s" % self.user_agent, file=sys.stderr)
                 self.user_agent=self.user_agent[0]
             self.user_agent=self.user_agent.replace('\t',' ')
 

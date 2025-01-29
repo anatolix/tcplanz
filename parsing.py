@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 from tcpsession import TCPSession, tcp_flags, SeqException
 from httpsession import parse_http_streams, HTTPParsingError, HTTPResponse, HTTPRequest
 from refactoring.errors import *
@@ -64,12 +66,12 @@ def parse_session_pair(connection,reverse_connection):
         http_items += [err]
         if error_packet is None or error_packet>err.packet_num:
             error_packet=err.packet_num
-        #print >> http_reqs, "connection:", err, "packet:", err.packet_num
-        print >> printing.debug_stream, "connection:", err, "packet:", err.packet_num
+        #print("connection:", err, "packet:", err.packet_num, file=http_reqs)
+        print("connection:", err, "packet:", err.packet_num, file=printing.debug_stream)
 
     try:
         rstream = reverse_connection.stream()
-        #print stream        
+        #print(stream)
         if rstream:
             for http_item in parse_http_streams(reverse_connection.directed_key, rstream, reverse_connection.pair.content, reverse_connection.content):
                 http_items += [http_item]
@@ -77,8 +79,8 @@ def parse_session_pair(connection,reverse_connection):
         http_items += [err]
         if error_packet is None or error_packet>err.packet_num:
             error_packet=err.packet_num
-        #print >> http_reqs, "reverse:", err, "packet:", err.packet_num
-        print >> printing.debug_stream, "reverse:", err, "packet:", err.packet_num
+        #print("reverse:", err, "packet:", err.packet_num, file=http_reqs)
+        print("reverse:", err, "packet:", err.packet_num, file=printing.debug_stream)
 
 
     for x in http_items: 
@@ -147,5 +149,5 @@ def handle_lite_tcp_session(lite_tcp_session):
 
     except (SeqException) as e:
     #except (SeqException,SSLSkipError) as e:
-        print >> sys.stderr, e
+        print(e, file=sys.stderr)
 

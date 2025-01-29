@@ -1,8 +1,10 @@
+#from __future__ import print_function
+
 import sys
 
-from baserecord import BaseRecord, BaseRecordStream
+from refactoring.baserecord import BaseRecord, BaseRecordStream
 from tcpsession import TCPSession
-from errors import RecordClassError,StreamClassError,ConnectionClassError,FatalClassError
+from refactoring.errors import RecordClassError,StreamClassError,ConnectionClassError,FatalClassError
 
 class TCPRecord(BaseRecord):
 
@@ -34,7 +36,7 @@ class TCPRecord(BaseRecord):
 
         for packet in self.packets:
             results += packet.data
-            #print >> sys.stderr, packet.adjusted_seq, len(packet.data)
+            #print(packet.adjusted_seq, len(packet.data), file=sys.stderr)
 
         #foo = ' '.join([str(len(p.data)) for p in self.packets])
 

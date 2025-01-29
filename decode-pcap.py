@@ -2,6 +2,8 @@
 # Turns a pcap file with http gzip compressed data into plain text, making it
 # easier to follow.
 
+from __future__ import print_function
+
 import dpkt
 import gzip
 import sys
@@ -33,7 +35,7 @@ def pcap_stream(filenames, ports):
         else:
             assert False, "Don't know how to parse file: "+filename
 
-        print >> sys.stderr, file_num, filename
+        print(file_num, filename, file=sys.stderr)
         
         with f:
             pcap = dpkt.pcap.Reader(f)
@@ -51,14 +53,14 @@ def pcap_stream(filenames, ports):
 
                 result = None
 
-        print >> sys.stderr, "total packets(%s): %s, ignored %s" % (filename, packet_num, ignored)
+        print("total packets(%s): %s, ignored %s" % (filename, packet_num, ignored), file=sys.stderr)
 
         file_num += 1
 
 
 def parse_pcap_files(filenames, ng = False):
 
-    print >> printing.http_stream, printing.header()
+    print(printing.header(), file=printing.http_stream)
 
     for lite_tcp_session in pcap_lite_sessions(pcap_stream(filenames,ports)):
         
@@ -70,7 +72,7 @@ def parse_pcap_files(filenames, ng = False):
 
 def parse_splitted_files(filenames, ng = False):
 
-    print >> printing.http_stream, printing.header()
+    print(printing.header(), file=printing.http_stream)
     for filename in sorted(filenames):
         for lite_tcp_session in pcap_lite_sessions(pcap_stream([filename],ports)):
             if ng:
@@ -98,7 +100,7 @@ def split_pcap_files(filenames):
 
             f=gzip.open(outdir+"/pcap%03d.pcap.gz" % fnum, 'wb')
             pcap = dpkt.pcap.Writer(f)
-            print >> sys.stderr, outdir+"/pcap%03d.pcap.gz" % fnum
+            print(outdir+"/pcap%03d.pcap.gz" % fnum, file=sys.stderr)
 
         for ts,buf in lite_tcp_session.raw_packets():
             pcap.writepkt(buf,ts)
@@ -113,7 +115,7 @@ def split_pcap_files(filenames):
 if __name__ == '__main__':
     import sys
     if len(sys.argv) <= 3:
-        print "%s outdir (parse|sparse|split) <pcap filename(s)>" % sys.argv[0]
+        print("%s outdir (parse|sparse|split) <pcap filename(s)>" % sys.argv[0])
         sys.exit(2)
 
     new_generation = 'ng' in sys.argv[0]
@@ -151,7 +153,7 @@ if __name__ == '__main__':
         split_pcap_files(sorted(sys.argv[3:]))
 
     else:
-        print "%s outdir (parse|sparse|split) <pcap filename(s)>" % sys.argv[0]
+        print("%s outdir (parse|sparse|split) <pcap filename(s)>" % sys.argv[0])
 
 
 

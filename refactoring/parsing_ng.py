@@ -1,8 +1,10 @@
-from tcprecord import TCPRecord, TCPRecordStream
+from __future__ import print_function
+
+from refactoring.tcprecord import TCPRecord, TCPRecordStream
 from httprecord import HTTPRecordStream
 from tcpsession import TCPSession, tcp_flags, SeqException
 from httpsession import parse_http_streams, HTTPParsingError, HTTPResponse, HTTPRequest
-from errors import *
+from refactoring.errors import *
 import sys
 
 import printing
@@ -64,16 +66,16 @@ def handle_lite_tcp_session_ng(lite_tcp_session):
 
                 tcp_record_stream = TCPRecordStream(connection.content, reverse_connection.content)
                 http_record_stream = HTTPRecordStream(tcp_record_stream)
-                print str(tcp_record_stream)
-                print str(http_record_stream)
+                print(str(tcp_record_stream))
+                print(str(http_record_stream))
 
             except(StreamClassError) as err:
-                print >> sys.stderr, err
+                print(err, file=sys.stderr)
 
 
     except(ConnectionClassError) as err:
-        print >> sys.stderr, err
+        print(err, file=sys.stderr)
 
     except(FatalClassError) as err:
-        print >> sys.stderr, err
+        print(err, file=sys.stderr)
         raise

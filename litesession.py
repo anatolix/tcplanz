@@ -1,12 +1,14 @@
 #!/usr/bin/env pypy
 
+from __future__ import print_function
+
 import dpkt
 import gzip
 import zlib
 import struct
 import sys
 from collections import defaultdict
-from cStringIO import StringIO
+import ctypes
 
 from tcpsession import TCPSession, tcp_flags
 
@@ -52,9 +54,9 @@ class LiteSession:
             if self.last_ts and (tcp.ts-self.last_ts > 30):
                 prev_seq=None
                 if direction_less:
-                    prevseq = self.last_seq_less
+                    prev_seq = self.last_seq_less
                 else:
-                    prevseq = self.last_seq_more
+                    prev_seq = self.last_seq_more
 
                 if prev_seq is not None:
 
@@ -120,7 +122,7 @@ def packet_parse_helper(datalink, buf):
             ignored += 1
             return
     else:
-        print >> sys.stderr, "Unknown datalink", pcap.datalink()
+        print("Unknown datalink", pcap.datalink(), file=sys.stderr)
         return None
 
     ip = eth.data
@@ -132,7 +134,7 @@ def packet_parse_helper(datalink, buf):
     tcp = ip.data
 
     if isinstance(tcp,str): 
-        print >> sys.stderr, "wtf, why ip.data could be str? (%s)" % tcp
+        print("wtf, why ip.data could be str? (%s)" % tcp, file=sys.stderr)
         return None
 
     return (ip,tcp)
@@ -167,29 +169,29 @@ def pcap_lite_sessions(stream, track_end=True):
             if ended and track_end:
                 bytes=sum([len(s) for s in connection.packed_content])
                 yield connection
-                #print >> sys.stderr, "splitting %s [%d] connection total bytes %d" % (TCPSession.display_key(fastkey),connection.num,bytes)
+                #print("splitting %s [%d] connection total bytes %d" % (TCPSession.display_key(fastkey),connection.num,bytes), file=sys.stderr)
                 total_bytes -= bytes
                 connections[fastkey]=connection.num+1
                 total_connections += 1
 
         total_bytes += data_increment
 
-        if last_print!=total_bytes/1024/1024:
-            last_print=total_bytes/1024/1024
-            print >> sys.stderr, "packets:", total_packets, ", conn:", total_connections, ", data:", last_print
+        if last_print != total_bytes // 1024 // 1024:
+            last_print = total_bytes // 1024 // 1024
+            print("packets:", total_packets, ", conn:", total_connections, ", data:", last_print, file=sys.stderr)
 
-    #print >> sys.stderr, "total packets %s, ignored %s, total connections %s" % (total_packets,packets_ignored,total_connections)
+    #print("total packets %s, ignored %s, total connections %s" % (total_packets,packets_ignored,total_connections), file=sys.stderr)
 
     #return unfinished connections as well
-    for fastkey in connections.iterkeys():
+    for fastkey in connections:
         connection = connections[fastkey]
         if connection:
             yield connections[fastkey]
             total_connections += 1
             connections[fastkey]=None
             total_bytes -= sum([len(s) for s in connection.packed_content])
-            if last_print!=total_bytes/1024/1024:
-                last_print=total_bytes/1024/1024
-                print >> sys.stderr, "packets:", total_packets, ", conn:", total_connections, ", data:", last_print
+            if last_print != total_bytes // 1024 // 1024:
+                last_print = total_bytes // 1024 // 1024
+                print("packets:", total_packets, ", conn:", total_connections, ", data:", last_print, file=sys.stderr)
 
 
